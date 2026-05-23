@@ -14,7 +14,7 @@ import {
 import { useSuspenseQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 
-import { Suspense } from "react"
+import { Suspense, useMemo, useState } from "react"
 import { ErrorBoundary } from "react-error-boundary"
 import { ItemsService } from "../../client"
 import ActionsMenu from "../../components/Common/ActionsMenu"
@@ -24,15 +24,33 @@ export const Route = createFileRoute("/_layout/items")({
   component: Items,
 })
 
-function ItemsTableBody() {
+interface ItemsTableBodyProps {
+  searchTerm: string
+}
+
+function ItemsTableBody({ searchTerm }: ItemsTableBodyProps) {
   const { data: items } = useSuspenseQuery({
     queryKey: ["items"],
     queryFn: () => ItemsService.readItems({}),
   })
 
+  const filteredItems = useMemo(() => {
+    const searchValue = searchTerm.trim().toLowerCase()
+
+    if (!searchValue) {
+      return items.data
+    }
+
+    return items.data.filter((item) =>
+      [item.id, item.title, item.description]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(searchValue)),
+    )
+  }, [items.data, searchTerm])
+
   return (
     <Tbody>
-      {items.data.map((item) => (
+      {filteredItems.map((item) => (
         <Tr key={item.id}>
           <Td>{item.id}</Td>
           <Td>{item.title}</Td>
@@ -44,10 +62,19 @@ function ItemsTableBody() {
           </Td>
         </Tr>
       ))}
+      {filteredItems.length === 0 && (
+        <Tr>
+          <Td colSpan={4}>No items found.</Td>
+        </Tr>
+      )}
     </Tbody>
   )
 }
-function ItemsTable() {
+interface ItemsTableProps {
+  searchTerm: string
+}
+
+function ItemsTable({ searchTerm }: ItemsTableProps) {
   return (
     <TableContainer>
       <Table size={{ base: "sm", md: "md" }}>
@@ -85,7 +112,7 @@ function ItemsTable() {
               </Tbody>
             }
           >
-            <ItemsTableBody />
+            <ItemsTableBody searchTerm={searchTerm} />
           </Suspense>
         </ErrorBoundary>
       </Table>
@@ -94,14 +121,20 @@ function ItemsTable() {
 }
 
 function Items() {
+  const [searchTerm, setSearchTerm] = useState("")
+
   return (
     <Container maxW="full">
       <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
         Items Management
       </Heading>
 
-      <Navbar type={"Item"} />
-      <ItemsTable />
+      <Navbar
+        type={"Item"}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+      />
+      <ItemsTable searchTerm={searchTerm} />
     </Container>
   )
 }
