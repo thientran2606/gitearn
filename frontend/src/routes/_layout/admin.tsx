@@ -16,7 +16,7 @@ import {
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 
-import { Suspense } from "react"
+import { Suspense, useMemo, useState } from "react"
 import { type UserPublic, UsersService } from "../../client"
 import ActionsMenu from "../../components/Common/ActionsMenu"
 import Navbar from "../../components/Common/Navbar"
@@ -25,7 +25,11 @@ export const Route = createFileRoute("/_layout/admin")({
   component: Admin,
 })
 
-const MembersTableBody = () => {
+interface MembersTableBodyProps {
+  searchTerm: string
+}
+
+const MembersTableBody = ({ searchTerm }: MembersTableBodyProps) => {
   const queryClient = useQueryClient()
   const currentUser = queryClient.getQueryData<UserPublic>(["currentUser"])
 
@@ -34,9 +38,28 @@ const MembersTableBody = () => {
     queryFn: () => UsersService.readUsers({}),
   })
 
+  const filteredUsers = useMemo(() => {
+    const searchValue = searchTerm.trim().toLowerCase()
+
+    if (!searchValue) {
+      return users.data
+    }
+
+    return users.data.filter((user) =>
+      [
+        user.full_name,
+        user.email,
+        user.is_superuser ? "superuser" : "user",
+        user.is_active ? "active" : "inactive",
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(searchValue)),
+    )
+  }, [searchTerm, users.data])
+
   return (
     <Tbody>
-      {users.data.map((user) => (
+      {filteredUsers.map((user) => (
         <Tr key={user.id}>
           <Td color={!user.full_name ? "ui.dim" : "inherit"}>
             {user.full_name || "N/A"}
@@ -69,6 +92,11 @@ const MembersTableBody = () => {
           </Td>
         </Tr>
       ))}
+      {filteredUsers.length === 0 && (
+        <Tr>
+          <Td colSpan={5}>No users found.</Td>
+        </Tr>
+      )}
     </Tbody>
   )
 }
@@ -88,12 +116,18 @@ const MembersBodySkeleton = () => {
 }
 
 function Admin() {
+  const [searchTerm, setSearchTerm] = useState("")
+
   return (
     <Container maxW="full">
       <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
         User Management
       </Heading>
-      <Navbar type={"User"} />
+      <Navbar
+        type={"User"}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+      />
       <TableContainer>
         <Table fontSize="md" size={{ base: "sm", md: "md" }}>
           <Thead>
@@ -106,7 +140,7 @@ function Admin() {
             </Tr>
           </Thead>
           <Suspense fallback={<MembersBodySkeleton />}>
-            <MembersTableBody />
+            <MembersTableBody searchTerm={searchTerm} />
           </Suspense>
         </Table>
       </TableContainer>
